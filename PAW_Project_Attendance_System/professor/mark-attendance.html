@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mark Attendance - Attendance System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+    header { background: #007bff; color: white; padding: 15px 20px; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { margin-bottom: 20px; }
+    .btn { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+    th { background: #f8f9fa; font-weight: bold; }
+    select { padding: 6px; border: 1px solid #ddd; border-radius: 4px; }
+    .btn-save { background: #28a745; }
+    .btn-save:hover { background: #218838; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mark Attendance</h1>
+  </header>
+
+  
+  <div class="container">
+    <button class="btn btn-save" onclick="saveAttendance()">Save Attendance</button>
+    <table id="attendanceTable">
+      <thead>
+        <tr>
+          <th>Student ID</th>
+          <th>Full Name</th>
+          <th>Present</th>
+          <th>Participation</th>
+        </tr>
+      </thead>
+      <tbody id="attendanceBody"></tbody>
+    </table>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="../scripts/show_user_name.js"></script>
+  <script>
+    const sessionId = new URLSearchParams(window.location.search).get('session_id');
+    const groupId = new URLSearchParams(window.location.search).get('group_id');
+
+    // Load students and attendance records on page load
+    $(document).ready(function() {
+      loadStudentAttendance();
+    });
+
+    function loadStudentAttendance() {
+      $('#attendanceBody').html('<tr><td colspan="4">Loading students...</td></tr>');
+
+      function loadFromEnrolled() {
+        // Load enrolled students as a fallback
+        $.ajax({ url: `../api/professor/get_group_enrolled.php?group_id=${encodeURIComponent(groupId)}`, type: 'GET' })
+          .done(function(enrolled) {
+            if (!enrolled || !enrolled.success) {
+              $('#attendanceBody').html('<tr><td colspan="4">Failed to load enrolled students</td></tr>');
+              console.error('get_group_enrolled failed', enrolled);
+              return;
+            }
+            let html = '';
+            enrolled.data.forEach(s => {
+              html += `<tr>
+                <td>${s.id}</td>
+                <td>${s.full_name}</td>
+                <td style="text-align:center;"><input type="checkbox" class="presentChk" data-student-id="${s.id}"></td>
+                <td style="text-align:center;"><input type="checkbox" class="partChk" data-student-id="${s.id}"></td>
+              </tr>`;
+            });
+            $('#attendanceBody').html(html);
+
+            // Fetch presence and update
+            $.ajax({ url: `../api/professor/get_session_attendance.php?session_id=${encodeURIComponent(sessionId)}`, type: 'GET' })
+              .done(function(attResp) {
+                if (attResp && attResp.success && attResp.data) {
+                  Object.keys(attResp.data).forEach(function(sid) {
+                    const status = attResp.data[sid];
+                    const $chk = $(`.presentChk[data-student-id="${sid}"]`);
+                    if ($chk.length) $chk.prop('checked', status === 'present');
+                  });
+                } else {
+                  console.warn('get_session_attendance returned no data or failed', attResp);
+                }
+              })
+              .fail(function(xhr, status) { console.error('get_session_attendance failed', status, xhr && xhr.responseText); });
+
+            // Fetch participation and update
+            $.ajax({ url: `../api/professor/get_session_participation.php?session_id=${encodeURIComponent(sessionId)}`, type: 'GET' })
+              .done(function(partResp) {
+                if (partResp && partResp.success && partResp.data) {
+                  Object.keys(partResp.data).forEach(function(sid) {
+                    const val = partResp.data[sid];
+                    const $pchk = $(`.partChk[data-student-id="${sid}"]`);
+                    if ($pchk.length) $pchk.prop('checked', !!val);
+                  });
+                } else {
+                  console.warn('get_session_participation returned no data or failed', partResp);
+                }
+              })
+              .fail(function(xhr, status) { console.error('get_session_participation failed', status, xhr && xhr.responseText); });
+
+          })
+          .fail(function(xhr, status) {
+            console.error('get_group_enrolled failed', status, xhr && xhr.responseText);
+            let msg = 'Error loading enrolled students';
+            try { const j = JSON.parse(xhr.responseText); if (j && j.message) msg = j.message; } catch(e) {}
+            $('#attendanceBody').html(`<tr><td colspan="4">${msg}</td></tr>`);
+          });
+      }
+
+      // If we have a session id, try to load saved records directly from attendance_records
+      if (sessionId) {
+        $.ajax({ url: `../api/professor/get_session_records.php?session_id=${encodeURIComponent(sessionId)}`, type: 'GET' })
+          .done(function(resp) {
+            if (resp && resp.success && Array.isArray(resp.data) && resp.data.length > 0) {
+              let html = '';
+              resp.data.forEach(s => {
+                const checkedPresence = s.presence == 1 ? 'checked' : '';
+                const checkedParticipation = s.participation == 1 ? 'checked' : '';
+                html += `<tr>
+                  <td>${s.student_id}</td>
+                  <td>${s.full_name}</td>
+                  <td style="text-align:center;"><input type="checkbox" class="presentChk" data-student-id="${s.student_id}" ${checkedPresence}></td>
+                  <td style="text-align:center;"><input type="checkbox" class="partChk" data-student-id="${s.student_id}" ${checkedParticipation}></td>
+                </tr>`;
+              });
+              $('#attendanceBody').html(html);
+              return;
+            }
+            // No saved records found, fall back to enrolled list
+            loadFromEnrolled();
+          })
+          .fail(function() { loadFromEnrolled(); });
+      } else {
+        loadFromEnrolled();
+      }
+    }
+
+    function saveAttendance() {
+      // Build combined records with presence (0/1) and participation (0/1)
+      const records = [];
+      $('.presentChk').each(function() {
+        const sid = $(this).data('student-id');
+        const presence = $(this).is(':checked') ? 1 : 0;
+        const participation = $(`.partChk[data-student-id="${sid}"]`).is(':checked') ? 1 : 0;
+        records.push({ student_id: sid, presence: presence, participation: participation });
+      });
+
+      // Send batch to mark_attendance.php (per-row insert/update)
+      $.ajax({
+        url: '../api/professor/mark_attendance.php',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ session_id: sessionId, records: records }),
+        success: function(r) {
+          console.log('mark_attendance response', r);
+          if (r && r.success) { alert('Attendance saved!'); history.back(); }
+          else {
+            let detail = r && r.errors ? '\nErrors:\n' + JSON.stringify(r.errors, null, 2) : '';
+            alert((r && r.message ? r.message : 'Failed to save attendance') + detail);
+          }
+        },
+        error: function(xhr) {
+          let msg = 'Server error';
+          try {
+            const j = JSON.parse(xhr.responseText);
+            console.error('mark_attendance error response', j);
+            msg = j.message || msg;
+            if (j.errors) msg += '\n' + JSON.stringify(j.errors);
+          } catch(e) { console.error('mark_attendance non-json error', xhr.responseText); }
+          alert(msg);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

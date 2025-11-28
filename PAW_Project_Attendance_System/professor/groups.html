@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Groups - Attendance System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+    header { background: #007bff; color: white; padding: 15px 20px; display:flex; justify-content:space-between; align-items:center; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+    .btn { padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .btn:hover { background: #0056b3; }
+    .btn-danger { background: #dc3545; }
+    .btn-danger:hover { background: #b21f2d; }
+    .form-group { margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 12px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #fafafa; }
+    .muted { color:#666; font-size:0.9em; }
+    .top-actions { display:flex; gap:10px; align-items:center; }
+    @media (max-width:720px) { header { flex-direction:column; gap:8px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Groups</h1>
+    <div class="top-actions">
+      <div id="courseName" class="muted"></div>
+      <button class="btn" onclick="history.back()">Back</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div style="margin-bottom:16px; display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+      <form id="createGroupForm" style="background:#fff;padding:12px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div class="form-group">
+          <label for="groupName">New Group Name</label>
+          <input id="groupName" type="text" required style="padding:8px;width:260px;border:1px solid #ddd;border-radius:4px;">
+        </div>
+        <input type="hidden" id="courseId">
+        <button type="submit" class="btn">Create Group</button>
+        <div id="createError" style="color:red;margin-top:8px;font-size:0.95em;"></div>
+      </form>
+
+      <div style="flex:1;min-width:260px;">
+        <div class="muted">Groups are scoped per course. Create a group, then manage students or sessions from the group's actions.</div>
+      </div>
+    </div>
+
+    <div id="groupsContainer"></div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="../scripts/show_user_name.js"></script>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const courseId = urlParams.get('course_id');
+
+    $(document).ready(function() {
+      if (!courseId) {
+        $('#groupsContainer').html('<div style="color:red">Missing `course_id` parameter in URL.</div>');
+        return;
+      }
+      $('#courseId').val(courseId);
+      loadCourseInfo();
+      loadGroups();
+
+      $('#createGroupForm').on('submit', function(e) {
+        e.preventDefault();
+        const name = $('#groupName').val().trim();
+        if (!name) { $('#createError').text('Group name is required'); return; }
+        $('#createError').text('');
+        const payload = { course_id: parseInt(courseId,10), group_name: name };
+        $.ajax({
+          url: '../api/professor/create_group.php',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify(payload),
+          success: function(resp) {
+            if (resp.success) {
+              $('#groupName').val('');
+              loadGroups();
+            } else {
+              $('#createError').text(resp.message || 'Failed to create group');
+            }
+          },
+          error: function() { $('#createError').text('Server error'); }
+        });
+      });
+    });
+
+    function loadCourseInfo() {
+      // Optionally show course name if endpoint exists; otherwise show course id
+      $('#courseName').text('Course ID: ' + courseId);
+    }
+
+    function loadGroups() {
+      $('#groupsContainer').html('<div style="padding:12px;background:#fff;border-radius:6px;">Loading groups...</div>');
+      $.ajax({
+        url: `../api/professor/get_groups.php?course_id=${encodeURIComponent(courseId)}`,
+        type: 'GET',
+        success: function(r) {
+          if (!r.success) { $('#groupsContainer').html('<div style="color:red">'+(r.message||'Failed to load')+'</div>'); return; }
+          if (!r.data || r.data.length === 0) { $('#groupsContainer').html('<div style="padding:12px;background:#fff;border-radius:6px;">No groups yet for this course.</div>'); return; }
+          let html = '<table><thead><tr><th>Group</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+          r.data.forEach(g => {
+            html += `<tr>
+              <td>${escapeHtml(g.group_name)}</td>
+              <td>${escapeHtml(g.created_at || '')}</td>
+                <td>
+                <button class="btn" onclick="openGroup(${g.id})">Manage</button>
+                <button class="btn" style="background:#17a2b8;margin-left:6px;" onclick="openSessions(${g.id})">Sessions</button>
+                <button class="btn btn-danger" style="margin-left:6px;" onclick="deleteGroup(${g.id}, this)">Delete</button>
+              </td>
+            </tr>`;
+          });
+          html += '</tbody></table>';
+          console.log('loadGroups generated HTML snippet (first 400 chars):', html.substring(0,400));
+          if (html.indexOf('Delete</button>') === -1) console.warn('Delete button not found in generated HTML');
+          $('#groupsContainer').html(html);
+        },
+        error: function() { $('#groupsContainer').html('<div style="color:red">Server error loading groups</div>'); }
+      });
+    }
+
+    function openGroup(groupId) {
+      window.location.href = `group.html?group_id=${groupId}`;
+    }
+
+    function openSessions(groupId) {
+      window.location.href = `group-sessions.html?group_id=${groupId}`;
+    }
+
+    function deleteGroup(groupId, btn) {
+      if (!confirm('Delete this group? The group must be empty (no students, no sessions).')) return;
+      const $btn = $(btn);
+      $btn.prop('disabled', true);
+      $('#createError').text('Deleting group...');
+      $.ajax({
+        url: '../api/professor/delete_group.php',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ group_id: groupId }),
+        success: function(r) {
+          if (r && r.success) {
+            $('#createError').text('');
+            loadGroups();
+          } else {
+            $btn.prop('disabled', false);
+            const msg = (r && r.message) ? r.message : 'Failed to delete group';
+            $('#createError').text(msg);
+          }
+        },
+        error: function(xhr) {
+          $btn.prop('disabled', false);
+          let msg = 'Server error';
+          try { const j = JSON.parse(xhr.responseText); if (j && j.message) msg = j.message; }
+          catch(e) { if (xhr.status) msg = `Server error (${xhr.status})`; }
+          $('#createError').text(msg);
+        }
+      });
+    }
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+  </script>
+</body>
+</html>

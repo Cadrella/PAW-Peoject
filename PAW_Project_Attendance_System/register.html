@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register - Attendance System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; }
+    .container { width: 100%; max-width: 400px; margin: auto; padding: 20px; }
+    .form-box { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { text-align: center; margin-bottom: 30px; color: #333; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; color: #555; font-weight: bold; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .btn { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+    .btn:hover { background: #218838; }
+    .text-center { text-align: center; margin-top: 15px; }
+    .text-center a { color: #007bff; text-decoration: none; }
+    .error { color: red; margin-top: 10px; }
+    @media (max-width: 480px) { .form-box { padding: 20px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="form-box">
+      <h1>Register</h1>
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="fullname">Full Name</label>
+          <input type="text" id="fullname" required>
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" required>
+        </div>
+        <div class="form-group">
+          <label for="role">Role</label>
+          <select id="role" required>
+            <option value="">Select Role</option>
+            <option value="student">Student</option>
+            <option value="professor">Professor</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <button type="submit" class="btn">Register</button>
+        <div id="error" class="error"></div>
+      </form>
+      <div class="text-center">
+        <p>Already have an account? <a href="login.html">Login</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="scripts/show_user_name.js"></script>
+  <script>
+    $(document).ready(function() {
+      $('#registerForm').on('submit', function(e) {
+        e.preventDefault();
+        const full_name = $('#fullname').val();
+        const email = $('#email').val();
+        const password = $('#password').val();
+        const role = $('#role').val();
+        
+        $.ajax({
+          url: 'api/register.php',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ full_name, email, password, role }),
+          success: function(response) {
+            if (response.success) {
+              alert('Registration successful! Redirecting to login...');
+              window.location.href = 'login.html';
+            } else {
+              $('#error').text(response.message);
+            }
+          },
+          error: function() {
+            $('#error').text('Registration error');
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>

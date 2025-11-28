@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Group - Attendance System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+    header { background: #007bff; color: white; padding: 15px 20px; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    .btn { padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .btn:hover { background: #0056b3; }
+    .form-group { margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 12px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <header style="display:flex;justify-content:space-between;align-items:center;">
+    <h1>Group</h1>
+    <div>
+      <button class="btn" onclick="history.back()">Back</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <h2 id="groupTitle">Group</h2>
+
+    <div style="margin-top:12px;">
+      <div class="form-group">
+        <label for="studentSearch">Search Student (name)</label>
+        <input type="text" id="studentSearch" placeholder="Type a name..." style="width:100%; padding:8px;">
+      </div>
+      <div id="searchResults"></div>
+    </div>
+
+    <h3 style="margin-top:20px;">Enrolled Students</h3>
+    <div id="enrolledList"></div>
+    
+    <!-- Sessions are managed on a separate page -->
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="../scripts/show_user_name.js"></script>
+  <script>
+    const groupId = new URLSearchParams(window.location.search).get('group_id');
+
+    $(document).ready(function() {
+      loadGroupInfo();
+      loadEnrolled();
+
+      let timer = null;
+      $('#studentSearch').on('input', function() {
+        clearTimeout(timer);
+        const q = $(this).val().trim();
+        timer = setTimeout(() => doSearch(q), 300);
+      });
+
+      function doSearch(q) {
+        if (!q) { $('#searchResults').html(''); return; }
+        $.ajax({
+          url: `../api/professor/search_students.php?q=${encodeURIComponent(q)}`,
+          type: 'GET',
+          success: function(resp) {
+            if (resp.success) {
+              if (resp.data.length === 0) { $('#searchResults').html('<div>No students found</div>'); return; }
+              let html = '<ul style="list-style:none;padding:0;">';
+              resp.data.forEach(s => {
+                html += `<li style="padding:8px;border-bottom:1px solid #eee; display:flex;justify-content:space-between;align-items:center;">
+                  <div>${s.full_name} <small style="color:#666">(${s.email})</small></div>
+                  <div><button class="btn addStudentBtn" data-id="${s.id}">Add</button></div>
+                </li>`;
+              });
+              html += '</ul>';
+              $('#searchResults').html(html);
+            }
+          },
+          error: function() { $('#searchResults').html('<div>Error searching</div>'); }
+        });
+      }
+
+      $(document).on('click', '.addStudentBtn', function() {
+        const studentId = $(this).data('id');
+        $.ajax({
+          url: '../api/professor/add_student.php',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ student_id: studentId, group_id: groupId }),
+          success: function(r) {
+            if (r.success) { alert('Student added'); loadEnrolled(); $('#searchResults').html(''); $('#studentSearch').val(''); }
+            else { alert(r.message || 'Failed to add student'); }
+          },
+          error: function() { alert('Server error'); }
+        });
+      });
+
+      // Remove student from group
+      $(document).on('click', '.removeStudentBtn', function() {
+        const studentId = $(this).data('id');
+        if (!confirm('Remove this student from the group?')) return;
+        $.ajax({
+          url: '../api/professor/remove_student.php',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ student_id: studentId, group_id: groupId }),
+          success: function(r) {
+            if (r.success) { alert('Student removed'); loadEnrolled(); }
+            else { alert(r.message || 'Failed to remove student'); }
+          },
+          error: function(xhr) {
+            let msg = 'Server error';
+            try { const j = JSON.parse(xhr.responseText); if (j && j.message) msg = j.message; }
+            catch(e) { if (xhr.status) msg = `Server error (${xhr.status})`; }
+            alert(msg);
+          }
+        });
+      });
+    });
+
+    function loadGroupInfo() {
+      // Quick title
+      $('#groupTitle').text('Group ID: ' + groupId);
+    }
+
+    function loadEnrolled() {
+      $.ajax({
+        url: `../api/professor/get_group_enrolled.php?group_id=${encodeURIComponent(groupId)}`,
+        type: 'GET',
+        success: function(r) {
+          if (r.success) {
+            if (r.data.length === 0) { $('#enrolledList').html('<div>No enrolled students</div>'); return; }
+            let html = '<ul style="list-style:none;padding:0;">';
+            r.data.forEach(s => {
+              html += `<li style="padding:8px;border-bottom:1px solid #eee; display:flex;justify-content:space-between;align-items:center;">
+                <div>${s.full_name} <small style="color:#666">(${s.email})</small></div>
+                <div><button class="btn removeStudentBtn" data-id="${s.id}" style="background:#dc3545;">Remove</button></div>
+              </li>`;
+            });
+            html += '</ul>';
+            $('#enrolledList').html(html);
+          } else { $('#enrolledList').html('<div>Error loading enrolled students</div>'); }
+        },
+        error: function() { $('#enrolledList').html('<div>Server error</div>'); }
+      });
+    }
+
+      // session management moved to dedicated group-sessions.html
+  </script>
+</body>
+</html>

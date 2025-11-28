@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Group Sessions - Attendance System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+    header { background: #007bff; color: white; padding: 15px 20px; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    .btn { padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .btn:hover { background: #0056b3; }
+    .form-group { margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 12px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <header style="display:flex;justify-content:space-between;align-items:center;">
+    <h1>Group Sessions</h1>
+    <div>
+      <button class="btn" onclick="history.back()">Back</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <h2 id="groupTitle">Group</h2>
+
+    <div style="margin-top:12px;">
+      <form id="createSessionForm">
+        <div class="form-group">
+          <label for="sessionName">Session Name</label>
+          <input type="text" id="sessionName" required placeholder="e.g. Lecture 1" style="width:100%;padding:8px;">
+        </div>
+        <div class="form-group">
+          <label for="sessionDate">Date</label>
+          <input type="date" id="sessionDate" required style="width:100%;padding:8px;">
+        </div>
+        <div class="form-group">
+          <label for="sessionTime">Time</label>
+          <input type="time" id="sessionTime" required style="width:100%;padding:8px;">
+        </div>
+        <button class="btn" type="submit">Add Session</button>
+        <div id="sessionError" style="color:red;margin-top:8px;"></div>
+      </form>
+    </div>
+
+    <div id="sessionMessage" style="margin-top:8px;color:green;"></div>
+    <h3 style="margin-top:16px;">Existing Sessions</h3>
+    <div id="groupSessions" style="margin-top:8px;"></div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="../scripts/show_user_name.js"></script>
+  <script>
+    const groupId = new URLSearchParams(window.location.search).get('group_id');
+
+    $(document).ready(function() {
+      if (!groupId) {
+        $('#groupTitle').text('Missing group_id');
+        $('#groupSessions').html('<div style="color:darkred">Missing `group_id` in URL. Open this page from a group link.</div>');
+        $('#createSessionForm').hide();
+        return;
+      }
+      loadGroupInfo();
+      $('#createSessionForm').on('submit', function(e) {
+        e.preventDefault();
+        const name = $('#sessionName').val().trim();
+        const d = $('#sessionDate').val();
+        const t = $('#sessionTime').val();
+        if (!name || !d || !t) { $('#sessionError').text('Name, date and time required'); return; }
+        $.ajax({
+          url: '../api/professor/create_session.php',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ group_id: groupId, session_name: name, session_date: d, session_time: t }),
+          success: function(r) {
+            if (r.success) { $('#sessionError').text(''); $('#sessionName').val(''); $('#sessionDate').val(''); $('#sessionTime').val(''); $('#sessionMessage').text('Session added').css('color','green'); loadGroupSessions(); }
+            else { $('#sessionError').text(r.message || 'Error'); }
+          },
+          error: function(xhr, status, err) {
+            let msg = 'Server error';
+            try { const j = JSON.parse(xhr.responseText); if (j && j.message) msg = j.message; }
+            catch(e) { if (xhr.status) msg = `Server error (${xhr.status})`; }
+            $('#sessionError').text(msg);
+          }
+        });
+      });
+
+      loadGroupSessions();
+    });
+
+    function loadGroupInfo() {
+      $('#groupTitle').text('Group ID: ' + groupId);
+    }
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function loadGroupSessions() {
+      $('#groupSessions').html('<div style="padding:10px;background:#fff;border-radius:6px;">Loading sessions...</div>');
+      console.log('loadGroupSessions -> requesting sessions for group:', groupId);
+      $.ajax({
+        url: `../api/professor/get_sessions_simple.php?group_id=${encodeURIComponent(groupId)}`,
+        type: 'GET',
+        dataType: 'json',
+        timeout: 10000,
+        cache: false,
+        success: function(r) {
+          console.log('get_sessions_simple response:', r);
+          if (r && r.success === true) {
+            // if API returned group info, show it
+            if (r.group && r.group.group_name) {
+              $('#groupTitle').text(r.group.group_name + '');
+            }
+            // if API returned course_id, store it (not strictly necessary here)
+            if (r.course_id) { window._currentCourseId = r.course_id; }
+
+            const list = Array.isArray(r.data) ? r.data : [];
+            if (list.length === 0) { $('#groupSessions').html('<div>No sessions</div>'); return; }
+            let html = '<table><thead><tr><th>Name</th><th>Date</th><th>Time</th><th>Actions</th></tr></thead><tbody>';
+            list.forEach(s => {
+              html += `<tr><td>${escapeHtml(s.session_name || s.name || '')}</td><td>${s.session_date}</td><td>${s.session_time || ''}</td><td><button class="btn" onclick="openAttendance(${s.id})">Attendance</button> <button class=\"btn\" style=\"background:#dc3545;\" onclick=\"deleteSession(${s.id}, this)\">Delete</button></td></tr>`;
+            });
+            html += '</tbody></table>';
+            $('#groupSessions').html(html);
+          } else {
+            const msg = (r && r.message) ? r.message : 'Error loading sessions';
+            $('#groupSessions').html('<div style="color:darkred">'+msg+'</div>');
+            console.warn('get_sessions_simple returned failure:', r);
+          }
+        },
+        error: function(xhr, status, err) {
+          let msg = 'Server error';
+          if (status === 'timeout') {
+            msg = 'Request timed out after 10s';
+          } else if (xhr && xhr.responseText) {
+            try { const j = JSON.parse(xhr.responseText); if (j && j.message) msg = j.message; else msg = xhr.responseText; }
+            catch(e) { msg = xhr.responseText; }
+          } else if (xhr && xhr.status) {
+            msg = `Server error (${xhr.status})`;
+          }
+          $('#groupSessions').html('<div style="color:darkred;white-space:pre-wrap">'+msg+'</div>');
+          console.error('get_sessions_simple error', status, err, xhr && xhr.responseText);
+        }
+      });
+    }
+
+    function openAttendance(sessionId) {
+      window.location.href = `mark-attendance.html?session_id=${sessionId}&group_id=${groupId}`;
+    }
+
+    function deleteSession(sessionId, btn) {
+      if (!confirm('Delete this session?')) return;
+      const $btn = $(btn);
+      $btn.prop('disabled', true);
+      $('#sessionMessage').text('Deleting...').css('color','black');
+      $.ajax({
+        url: `../api/professor/delete_session.php`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ session_id: sessionId }),
+        success: function(r) {
+          if (r.success) {
+            $('#sessionMessage').text('Session deleted').css('color','green');
+            loadGroupSessions();
+          } else {
+            $('#sessionMessage').text(r.message || 'Failed to delete').css('color','red');
+            $btn.prop('disabled', false);
+          }
+        },
+        error: function() { $('#sessionMessage').text('Server error').css('color','red'); $btn.prop('disabled', false); }
+      });
+    }
+  </script>
+</body>
+</html>

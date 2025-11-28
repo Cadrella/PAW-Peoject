@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Professor Dashboard - Attendance System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+    header { background: #007bff; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { font-size: 24px; }
+    .btn { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .btn:hover { background: #0056b3; }
+    .btn-logout { background: #dc3545; }
+    .btn-logout:hover { background: #c82333; }
+    .course-list { display: grid; gap: 20px; }
+    .course-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .course-card h3 { margin-bottom: 10px; }
+    .course-card p { color: #666; margin-bottom: 10px; }
+    .btn-group { display: flex; gap: 10px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+    th { background: #f8f9fa; font-weight: bold; }
+    .status-badge { padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+    .status-open { background: #28a745; color: white; }
+    .status-closed { background: #dc3545; color: white; }
+    .status-draft { background: #ffc107; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+    .modal.active { display: flex; }
+    .modal-content { background: white; padding: 30px; border-radius: 8px; margin: auto; width: 90%; max-width: 500px; }
+    .modal-content h2 { margin-bottom: 20px; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+    .btn-submit { width: 100%; }
+    @media (max-width: 768px) { header { flex-direction: column; gap: 10px; } .course-list { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Professor Dashboard</h1>
+    <div>
+      <span id="userName"></span>
+      <button class="btn btn-logout" onclick="logout()">Logout</button>
+    </div>
+  </header>
+  <div class="container">
+    <div style="margin-bottom: 20px;">
+      <button class="btn" onclick="showCourseModal()">Add Course</button>
+    </div>
+
+    <div class="course-list" id="courseList"></div>
+  </div>
+
+  <div id="courseModal" class="modal">
+    <div class="modal-content">
+      <h2>Add Course</h2>
+      <form id="courseForm">
+        <div class="form-group">
+          <label for="courseCode">Course Code</label>
+          <input type="text" id="courseCode" required>
+        </div>
+        <div class="form-group">
+          <label for="courseName">Course Name</label>
+          <input type="text" id="courseName" required>
+        </div>
+        <button type="submit" class="btn btn-submit">Add Course</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="../scripts/show_user_name.js"></script>
+  <script>
+    $(document).ready(function() {
+      $('#userName').text(sessionStorage.getItem('full_name') || 'Professor');
+      loadCourses();
+    });
+
+    function loadCourses() {
+      $.ajax({
+        url: '../api/professor/get_courses.php',
+        type: 'GET',
+        success: function(response) {
+          if (response.success) {
+            let html = '';
+            response.data.forEach(course => {
+              html += `
+                <div class="course-card">
+                  <h3>${course.name}</h3>
+                  <p>Code: ${course.code}</p>
+                  <div class="btn-group">
+                    <button class="btn" onclick="showGroups(${course.id})">Manage Groups</button>
+                  </div>
+                </div>
+              `;
+            });
+            $('#courseList').html(html);
+          }
+        }
+      });
+    }
+
+    function showCourseModal() {
+      $('#courseModal').addClass('active');
+    }
+
+    $('#courseForm').on('submit', function(e) {
+      e.preventDefault();
+      const code = $('#courseCode').val().trim();
+      const name = $('#courseName').val().trim();
+      if (!code || !name) {
+        alert('Please provide both code and name');
+        return;
+      }
+
+      $.ajax({
+        url: '../api/professor/add_course.php',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ code: code, name: name }),
+        success: function(response) {
+          if (response.success) {
+            $('#courseModal').removeClass('active');
+            $('#courseCode').val('');
+            $('#courseName').val('');
+            loadCourses();
+          } else {
+            alert(response.message || 'Failed to add course');
+          }
+        },
+        error: function() {
+          alert('Error contacting server');
+        }
+      });
+    });
+
+    // View Sessions and View Attendance buttons removed — use Manage Groups -> Sessions per group
+
+    function showGroups(courseId) {
+      window.location.href = `groups.html?course_id=${courseId}`;
+    }
+
+    function logout() {
+      $.ajax({
+        url: '../api/logout.php',
+        success: function() {
+          window.location.href = '../login.html';
+        }
+      });
+    }
+
+    function escapeJsString(s) {
+      return s.replace(/'/g, "\\'").replace(/\n/g, ' ');
+    }
+
+    $(document).on('click', function(e) {
+      if ($(e.target).is('#courseModal')) {
+        $('#courseModal').removeClass('active');
+      }
+    });
+  </script>
+</body>
+</html>

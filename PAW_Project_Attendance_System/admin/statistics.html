@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Statistics - Attendance System</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+    header { background: #dc3545; color: white; padding: 15px 20px; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { margin-bottom: 20px; }
+    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+    .chart-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .btn { padding: 10px 15px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
+    .btn:hover { background: #c82333; }
+    @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header style="display:flex;justify-content:space-between;align-items:center;">
+    <h1>System Statistics</h1>
+    <div>
+      <button class="btn" onclick="history.back()">Back</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="charts-grid">
+      <div class="chart-box">
+        <h2>Attendance Overview</h2>
+        <canvas id="attendanceChart"></canvas>
+      </div>
+      <div class="chart-box">
+        <h2>User Distribution</h2>
+        <canvas id="userChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="../scripts/show_user_name.js"></script>
+  <script>
+    $(document).ready(function() {
+      $.ajax({
+        url: '../api/admin/get_statistics.php',
+        type: 'GET',
+        success: function(response) {
+          if (response.success) {
+            const data = response.data;
+            
+            // Attendance chart
+            const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
+            new Chart(attendanceCtx, {
+              type: 'doughnut',
+              data: {
+                labels: ['Present', 'Absent'],
+                datasets: [{
+                  data: [data.total_present, 100],
+                  backgroundColor: ['#28a745', '#dc3545']
+                }]
+              }
+            });
+
+            // User distribution chart
+            const userCtx = document.getElementById('userChart').getContext('2d');
+            new Chart(userCtx, {
+              type: 'bar',
+              data: {
+                labels: ['Students', 'Professors'],
+                datasets: [{
+                  label: 'Count',
+                  data: [data.total_students, data.total_professors],
+                  backgroundColor: ['#007bff', '#28a745']
+                }]
+              }
+            });
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>

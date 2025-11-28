@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register Admin - Attendance System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; }
+    .container { width: 100%; max-width: 500px; margin: auto; padding: 20px; }
+    .form-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { text-align: center; margin-bottom: 20px; color: #333; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 5px; color: #555; font-weight: bold; }
+    input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .btn { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+    .btn:hover { background: #0069d9; }
+    .error { color: red; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="form-box">
+      <h1>Register New Admin</h1>
+      <form id="adminRegisterForm">
+        <div class="form-group">
+          <label for="fullname">Full Name</label>
+          <input type="text" id="fullname" required>
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" required>
+        </div>
+        <button type="submit" class="btn">Create Admin</button>
+        <div id="error" class="error"></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="../scripts/show_user_name.js"></script>
+  <script>
+    $(document).ready(function() {
+      // Verify current user is authenticated and is admin before showing form
+      $.ajax({
+        url: '../api/me.php',
+        type: 'GET',
+        success: function(resp) {
+          if (!resp.success || resp.role !== 'admin') {
+            alert('You must be an admin and logged in to access this page.');
+            window.location.href = '../login.html';
+          }
+        },
+        error: function() {
+          window.location.href = '../login.html';
+        }
+      });
+
+      $('#adminRegisterForm').on('submit', function(e) {
+        e.preventDefault();
+        const full_name = $('#fullname').val().trim();
+        const email = $('#email').val().trim();
+        const password = $('#password').val();
+
+        if (!full_name || !email || !password) {
+          $('#error').text('All fields are required');
+          return;
+        }
+
+        $.ajax({
+          url: '../api/admin/register_admin.php',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ full_name, email, password }),
+          success: function(response) {
+            if (response.success) {
+              alert('Admin created successfully');
+              $('#fullname').val('');
+              $('#email').val('');
+              $('#password').val('');
+              $('#error').text('');
+            } else {
+              $('#error').text(response.message || 'Registration failed');
+            }
+          },
+          error: function(xhr) {
+            if (xhr.status === 401 || xhr.status === 403) {
+              $('#error').text('You are not authorized to perform this action');
+            } else {
+              $('#error').text('Server error');
+            }
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>
